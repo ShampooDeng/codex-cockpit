@@ -78,3 +78,16 @@
   font-size: clamp(10px, calc(9px * var(--ui-font-scale, 1)), 16px);
   text-overflow: ellipsis;
 }
+.comfort-account-settings {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #8894aa40);
+  border-radius: 12px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.comfort-account-settings summary { cursor: pointer; font-weight: 600; }
+.comfort-account-settings label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.comfort-account-settings p { line-height: 1.5; opacity: .85; }
+.comfort-account-settings input[type="date"], .comfort-account-settings select { max-width: 100%; padding: 5px; color: inherit; background: transparent; border: 1px solid #8894aa60; border-radius: 6px; }
+.comfort-account-settings ul { padding-left: 18px; }

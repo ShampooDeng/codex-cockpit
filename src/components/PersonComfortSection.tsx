@@ -1,13 +1,15 @@
 import type { TokeiUsage } from "../lib/tokeiUsage";
 import { useMemo } from "react";
-import { buildComfortPrompt, personalizeComfortCurve } from "../lib/comfortFeedback";
-import { personalFeedbackView, missingComfortUsageReason } from "../lib/personComfort";
-import { buildPersonQuotaAllocation } from "../lib/personQuotaAllocation";
-import type { CodexDailyUsage, ComfortCode, ComfortFeedbackRecord, ComfortQuotaAllocation, DailyUsageSummary, Language } from "../types";
+import { buildComfortPrompt, createComfortFeedbackRecord, personalizeComfortCurve } from "../lib/comfortFeedback";
+import { personalFeedbackView, resolveComfortUsage, comfortUsageReasonText, type ComfortUsageReason, type ResolvedComfortUsage } from "../lib/personComfort";
+import { EMPTY_ACCOUNT_USAGE, type AccountUsageContext, type AccountUsageDeclaration } from "../lib/accountUsage";
+import { AccountUsageSettings } from "./AccountUsageSettings";
+import type { CodexDailyUsage, ComfortCode, ComfortFeedbackRecord, DailyUsageSummary, Language } from "../types";
 import { ComfortHistoryCalendar } from "./ComfortHistoryCalendar";
 import { ComfortCurvePanel } from "./ComfortCurvePanel";
 
-export function PersonComfortSection({ data, personId, records, language, dailyUsageHistory = [], dailyUsage = [], curve: sharedCurve, loadingError = false, saving = false, error = null, onPersonChange, onChange, onRefreshSnapshot }: {
+export function PersonComfortSection({ data, personId, records, language, dailyUsageHistory = [], dailyUsage = [], curve: sharedCurve, loadingError = false, saving = false, error = null, onPersonChange, onChange, onRefreshSnapshot, accountUsage = EMPTY_ACCOUNT_USAGE, onAccountUsageChange }: {
+  accountUsage?: AccountUsageContext; onAccountUsageChange?: (value: AccountUsageDeclaration[]) => void;
   data: TokeiUsage | null; personId: string | null; records: readonly ComfortFeedbackRecord[]; language: Language;
   curve?: ReturnType<typeof personalizeComfortCurve>;
   dailyUsageHistory?: readonly CodexDailyUsage[]; dailyUsage?: readonly DailyUsageSummary[];
@@ -18,19 +20,22 @@ export function PersonComfortSection({ data, personId, records, language, dailyU
 }) {
   const zh = language !== "en";
   const selected = data?.groups.find(group => group.id === personId);
-  const ownRecords = useMemo(() => records.filter(record => (record.personId ?? null) === personId).map(record => personalFeedbackView(record, data, dailyUsageHistory, dailyUsage)), [records, personId, data, dailyUsageHistory, dailyUsage]);
+  const ownRecords = useMemo(() => records.filter(record => (record.personId ?? null) === personId).map(record => personalFeedbackView(record, data, dailyUsageHistory, dailyUsage, new Date(), accountUsage)), [records, personId, data, dailyUsageHistory, dailyUsage, accountUsage]);
+  const resolvedByDate = useMemo(() => Object.fromEntries(records.filter(record => (record.personId ?? null) === personId)
+    .map(record => [record.localDate, resolveComfortUsage(record, data, dailyUsageHistory, dailyUsage, new Date(), accountUsage)])) as Record<string, ResolvedComfortUsage>, [records, personId, data, dailyUsageHistory, dailyUsage, accountUsage]);
+  const reasons = new Map<ComfortUsageReason, number>();
+  for (const result of Object.values(resolvedByDate)) if (result.reason) reasons.set(result.reason, (reasons.get(result.reason) ?? 0) + 1);
   const curve = useMemo(() => sharedCurve ?? personalizeComfortCurve(ownRecords), [sharedCurve, ownRecords]);
-  const percentByDate = useMemo(() => {
-    const result: Record<string, ComfortQuotaAllocation> = {};
-    if (!personId || !data) return result;
+  const calendarUsage = useMemo(() => {
+    const result: Record<string, ResolvedComfortUsage> = {};
+    if (!personId || !data) return resolvedByDate;
     const dates = new Set([...dailyUsageHistory.map(day => day.localDate), ...dailyUsage.filter(day => day.provider === "codex").map(day => day.localDate)]);
     for (const date of dates) {
       const total = buildComfortPrompt({ localDate: date, isCatchUp: true }, dailyUsageHistory.find(day => day.localDate === date) ?? null, dailyUsage);
-      const allocation = buildPersonQuotaAllocation(data, personId, date, total);
-      if (allocation) result[date] = allocation;
+      result[date] = resolveComfortUsage(createComfortFeedbackRecord({ ...total, personId }, "comfortable"), data, dailyUsageHistory, dailyUsage, new Date(), accountUsage);
     }
-    return result;
-  }, [data, personId, dailyUsageHistory, dailyUsage]);
+    return { ...result, ...resolvedByDate };
+  }, [data, personId, dailyUsageHistory, dailyUsage, accountUsage, resolvedByDate]);
   const legacyCount = records.filter(record => !record.personId).length;
   const orphans = new Map<string, string>();
   for (const record of records) if (record.personId && !data?.groups.some(group => group.id === record.personId)) orphans.set(record.personId, record.personName || record.personId);
@@ -48,7 +53,8 @@ export function PersonComfortSection({ data, personId, records, language, dailyU
     {error && <p className="comfort-person-error" role="alert">{error}</p>}
     <ComfortCurvePanel curve={curve} language={language} estimated={Boolean(personId)} personSelector={personSelector} />
     <p className="comfort-person-note" role="status">{zh ? `已保存 ${ownRecords.length} 条体验，其中 ${curve.sampleCount} 条可用于曲线。` : `${ownRecords.length} saved experiences; ${curve.sampleCount} usable for the curve.`}</p>
-    {ownRecords.length > 0 && curve.sampleCount === 0 && <p className="comfort-person-note">{missingComfortUsageReason(records.find(record => (record.personId ?? null) === personId)!, data, zh)}</p>}
-    <ComfortHistoryCalendar key={personId ?? "legacy"} personPercentMode percentByDate={percentByDate} personId={selected ? personId : null} usageData={data} records={ownRecords} language={language} onChange={onChange} saving={saving} onRefreshSnapshot={selected ? onRefreshSnapshot : undefined} />
+    {[...reasons].sort(([a], [b]) => a.localeCompare(b)).map(([reason, count]) => <p className="comfort-person-note" key={reason}>{count}{zh ? " 条：" : " entries: "}{comfortUsageReasonText(reason, zh)}</p>)}
+    {onAccountUsageChange && <AccountUsageSettings key={`${accountUsage.scope}:${personId}`} context={accountUsage} data={data} personId={personId} zh={zh} onChange={onAccountUsageChange} />}
+    <ComfortHistoryCalendar key={personId ?? "legacy"} personPercentMode resolvedByDate={calendarUsage} personId={selected ? personId : null} usageData={data} records={ownRecords} language={language} onChange={onChange} saving={saving} onRefreshSnapshot={selected ? onRefreshSnapshot : undefined} />
   </div>;
 }

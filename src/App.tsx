@@ -30,7 +30,7 @@ import { DEFAULT_WIDGET_PREFERENCES, effectiveCompactLayout, effectiveStayExpand
 import { resolveAppearanceMode, systemPrefersDark } from "./lib/appearance";
 import { appendComfortFeedback, appendComfortPromptedDate, buildComfortPrompt, createComfortFeedbackRecord, getPersonComfortPromptTarget, nextComfortReminderAt, personalizeComfortCurve } from "./lib/comfortFeedback";
 import { buildPersonQuotaAllocation } from "./lib/personQuotaAllocation";
-import { allocationForFeedback, backfillPersonAllocations, refreshFeedbackUsage, missingComfortUsageReason } from "./lib/personComfort";
+import { allocationForFeedback, backfillPersonAllocations, refreshFeedbackUsage, missingComfortUsageReason, resolveComfortUsage } from "./lib/personComfort";
 import { buildTokenComfortSnapshot } from "./lib/tokenComfort";
 import { useComfortUsage } from "./lib/useComfortUsage";
 import { loadStartupState } from "./lib/startup";
@@ -89,6 +89,7 @@ export default function App() {
   const { data: comfortUsage, error: comfortUsageError, refresh: refreshComfortUsage } = useComfortUsage(startupReady);
   const comfortPersonId = runtimeState.comfortPersonId === undefined ? comfortUsage?.localGroupId ?? null : runtimeState.comfortPersonId;
   const comfortPerson = comfortUsage?.groups.find(group => group.id === comfortPersonId);
+  const accountUsage = useMemo(() => ({ scope: comfortUsage?.localProfileScope ?? null, declarations: preferences.accountUsageDeclarations ?? [] }), [comfortUsage?.localProfileScope, preferences.accountUsageDeclarations]);
   const [appDiagnostics, setAppDiagnostics] = useState<AppDiagnostics | null>(null);
   const [autostartEnabled, setAutostartState] = useState(false);
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
@@ -275,8 +276,8 @@ export default function App() {
       runtimeStateRef.current = next;
       setRuntimeState(next);
       await updateRuntimeState(next);
-      if (refreshSnapshot && (!quotaAllocation || quotaAllocation.coverage === "unavailable" || quotaAllocation.allocatedUsedPercent === null)) {
-        setComfortSaveError(missingComfortUsageReason(feedback, data, language !== "en"));
+      if (refreshSnapshot) {
+        setComfortSaveError(missingComfortUsageReason(feedback, data, language !== "en", accountUsage) || null);
       }
       if (comfortPromptRef.current?.localDate === localDate && (comfortPromptRef.current.personId ?? null) === personId) {
         comfortPromptRef.current = null;
@@ -285,7 +286,7 @@ export default function App() {
     } catch {
       setComfortSaveError(language === "en" ? "This feedback has not been saved to disk. Please retry." : "这条体验尚未写入磁盘，请重试保存。");
     } finally { comfortSaveBusy.current = false; setComfortSaving(false); }
-  }, [comfortUsage, refreshComfortUsage, codexDailyUsageHistory, language]);
+  }, [comfortUsage, refreshComfortUsage, codexDailyUsageHistory, language, accountUsage]);
 
   const handleComfortSelect = useCallback((comfort: ComfortCode) => {
     const prompt = comfortPromptRef.current;
@@ -1098,7 +1099,7 @@ export default function App() {
       dailyPersonCosts={dailyPersonCosts}
       dailyRecommendation={dailyRecommendation}
       personalUsageCalibration={personalUsageCalibration}
-      comfortPrompt={comfortPrompt}
+      comfortPrompt={comfortPrompt ? { ...comfortPrompt, resolvedUsage: resolveComfortUsage(createComfortFeedbackRecord(comfortPrompt, "comfortable"), comfortUsage, codexDailyUsageHistory, runtimeState.dailyUsage, new Date(), accountUsage) } : null}
       comfortSaving={comfortSaving}
       comfortSaveError={comfortSaveError ?? (comfortSyncError ? (language === "en" ? "Synced comfort records could not be read; local records are preserved." : "同步体验暂时无法读取，本地记录已保留。") : null)}
       onComfortSelect={handleComfortSelect}

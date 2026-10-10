@@ -6,10 +6,23 @@ use crate::{
     usage_sync, usage_sync_snapshot,
 };
 use chrono::{Local, NaiveDate};
+use sha2::{Digest, Sha256};
 use std::{path::PathBuf, sync::Mutex};
 
 static MERGE_LOCK: Mutex<()> = Mutex::new(());
 const CACHE: &str = "local-usage-cache.json";
+
+// Configuration boundary only, not account verification. No credentials are read.
+fn profile_scope(home: &std::path::Path) -> Option<String> {
+    let path = std::env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".codex"));
+    let canonical = path.canonicalize().ok()?;
+    Some(format!(
+        "{:x}",
+        Sha256::digest(canonical.to_string_lossy().as_bytes())
+    ))
+}
 
 /// Pure projection: never sum a rescan with the previous copy of the same day.
 fn project(
@@ -80,6 +93,7 @@ pub(crate) async fn read(data: PathBuf, home: PathBuf) -> Result<TokeiUsage, Str
         usage_sync::merge_managed_usage(&source, &mut usage);
         usage.local_group_id = tokei_usage::local_group_id(&usage.groups, Some(&id));
         usage.local_device_id = Some(id.clone());
+        usage.local_profile_scope = profile_scope(&home);
         usage.local_only = usage_sync::settings_at(&source)?.is_none();
         usage
             .warnings

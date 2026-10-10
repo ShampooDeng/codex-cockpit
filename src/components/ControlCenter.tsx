@@ -1,6 +1,7 @@
 import { ArrowClockwise, ArrowSquareOut, GearSix, Monitor, Moon, Sun, X } from "@phosphor-icons/react";
 import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { personalFeedbackView } from "../lib/personComfort";
+import { AccountUsageSettings } from "./AccountUsageSettings";
 import { personalizeComfortCurve } from "../lib/comfortFeedback";
 import { useModalDialog } from "../lib/modalDialog";
 import { setControlCenterCalendarOpen } from "../lib/bridge";
@@ -45,10 +46,11 @@ interface Props {
 
 export function ControlCenter({ preferences, language, comfortFeedback = [], dailyUsage = [], dailyUsageHistory = [], dailyRecommendation = null, weeklyRemainingPercent = null, carryInPercent = 0, onComfortFeedback = () => undefined, comfortUsage = null, comfortPersonId = null, comfortUsageError = false, comfortSaving = false, comfortSaveError = null, onComfortPersonChange = () => undefined, onComfortSnapshotRefresh = () => undefined, onUsageGroupsChange = () => undefined, onCheckUpdate = () => undefined, onClose, onRefresh, onOpenCodexResets = () => undefined, onDrag = () => undefined, onPreferences, onSliderInteraction = () => undefined, autostartEnabled, onAutostart }: Props) {
   const dialogRef = useModalDialog<HTMLElement>(onClose);
+  const accountUsage = useMemo(() => ({ scope: comfortUsage?.localProfileScope ?? null, declarations: preferences.accountUsageDeclarations ?? [] }), [comfortUsage?.localProfileScope, preferences.accountUsageDeclarations]);
   const selectedPersonCurve = useMemo(() => personalizeComfortCurve(
     comfortFeedback.filter(record => (record.personId ?? null) === comfortPersonId)
-      .map(record => personalFeedbackView(record, comfortUsage, dailyUsageHistory, dailyUsage)),
-  ), [comfortFeedback, comfortPersonId, comfortUsage, dailyUsageHistory, dailyUsage]);
+      .map(record => personalFeedbackView(record, comfortUsage, dailyUsageHistory, dailyUsage, new Date(), accountUsage)),
+  ), [comfortFeedback, comfortPersonId, comfortUsage, dailyUsageHistory, dailyUsage, accountUsage]);
   const [page, setPage] = useState<"quota" | "usage" | "settings">("usage");
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarPortalTarget, setCalendarPortalTarget] = useState<HTMLElement | null>(null);
@@ -138,6 +140,7 @@ export function ControlCenter({ preferences, language, comfortFeedback = [], dai
         </nav>
         {page === "usage" ? <CodexUsagePanel zh={zh} initialUsage={comfortUsage} onOpenSettings={() => changePage("settings")} calendarOpen={calendarOpen} onCalendarOpenChange={changeCalendarOpen} calendarPortalTarget={calendarPortalTarget} /> : page === "settings" ? <div className="control-settings-page" aria-label={labels.settings}>
         <TeamMemberSettings usage={comfortUsage} loadingError={comfortUsageError} preferences={preferences} zh={zh} onPreferences={onPreferences} onSaved={onUsageGroupsChange} />
+        <AccountUsageSettings context={accountUsage} data={comfortUsage} personId={comfortPersonId} zh={zh} onChange={value => updatePreferences({ accountUsageDeclarations: value })} />
         <CloudSyncSettings usage={comfortUsage} zh={zh} onSynced={onUsageGroupsChange} />
 
         <section className="minimal-section" aria-labelledby="minimal-display-title">
@@ -227,7 +230,7 @@ export function ControlCenter({ preferences, language, comfortFeedback = [], dai
           isWeekend={(dailyRecommendation?.weekday ?? 0) >= 5}
         />
 
-        <PersonComfortSection curve={selectedPersonCurve} data={comfortUsage} personId={comfortPersonId} records={comfortFeedback} dailyUsage={dailyUsage} dailyUsageHistory={dailyUsageHistory} language={language} loadingError={comfortUsageError} saving={comfortSaving} error={comfortSaveError} onPersonChange={onComfortPersonChange} onChange={onComfortFeedback} onRefreshSnapshot={onComfortSnapshotRefresh} />
+        <PersonComfortSection curve={selectedPersonCurve} accountUsage={accountUsage} onAccountUsageChange={value => updatePreferences({ accountUsageDeclarations: value })} data={comfortUsage} personId={comfortPersonId} records={comfortFeedback} dailyUsage={dailyUsage} dailyUsageHistory={dailyUsageHistory} language={language} loadingError={comfortUsageError} saving={comfortSaving} error={comfortSaveError} onPersonChange={onComfortPersonChange} onChange={onComfortFeedback} onRefreshSnapshot={onComfortSnapshotRefresh} />
 
         <footer className="minimal-footer"><span>{labels.source}</span><button type="button" onClick={onClose}>{labels.done}</button></footer>
         </>}

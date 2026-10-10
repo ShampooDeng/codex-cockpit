@@ -1,7 +1,9 @@
 import { DEFAULT_PROVIDER_ORDER, normalizeProviderOrder } from "./providers";
+import { normalizeAccountUsage } from "./accountUsage";
 import type { ProviderId, WidgetPreferences, WindowCompactLayout } from "../types";
 
 export const DEFAULT_WIDGET_PREFERENCES: WidgetPreferences = {
+  accountUsageDeclarations: [],
   codexFocusMode: true,
   dailyBudgetPercent: 14.3,
   dailyBudgetLocalDate: null,
@@ -115,6 +117,7 @@ export function normalizeWidgetPreferences(value: LegacyWidgetPreferences | null
     ? candidate.accentColor
     : DEFAULT_WIDGET_PREFERENCES.accentColor;
   return {
+    accountUsageDeclarations: normalizeAccountUsage(candidate.accountUsageDeclarations),
     codexFocusMode: booleanValue(candidate.codexFocusMode, DEFAULT_WIDGET_PREFERENCES.codexFocusMode),
     dailyBudgetPercent: boundedDecimal(candidate.dailyBudgetPercent, DEFAULT_WIDGET_PREFERENCES.dailyBudgetPercent, 1, 100),
     dailyBudgetLocalDate: safeUsageDate(candidate.dailyBudgetLocalDate),

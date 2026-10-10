@@ -9,9 +9,34 @@ import { buildPersonQuotaAllocation } from "../lib/personQuotaAllocation";
 import type { ComfortFeedbackRecord } from "../types";
 import type { TokeiUsage } from "../lib/tokeiUsage";
 import { PersonComfortSection } from "./PersonComfortSection";
+import type { AccountUsageDeclaration } from "../lib/accountUsage";
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 7, 14, 12)); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+it("applies an explicit historical personal-account declaration to one valid record and explains the other", () => {
+  const source = { ...data(), localOnly: true, localProfileScope: "a".repeat(64) };
+  const valid = { ...record("alex", "comfortable"), observedUsedPercent: 18, quotaAllocation: null };
+  const missing = { ...valid, localDate: "2026-08-13", observedUsedPercent: null, usageCoverage: "unavailable" as const };
+  function Harness() {
+    const [declarations, setDeclarations] = useState<AccountUsageDeclaration[]>([]);
+    return <PersonComfortSection data={source} personId="alex" records={[missing, valid]} language="zh-CN" accountUsage={{ scope: source.localProfileScope, declarations }} onAccountUsageChange={setDeclarations} onPersonChange={vi.fn()} onChange={vi.fn()} onRefreshSnapshot={vi.fn()} />;
+  }
+  const { container } = render(<Harness />);
+  expect(screen.getByText("已保存 2 条体验，其中 0 条可用于曲线。")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("账号使用方式 · 未确认"));
+  fireEvent.change(screen.getByLabelText("账号使用方式"), { target: { value: "exclusive" } });
+  fireEvent.change(screen.getByLabelText("生效日期"), { target: { value: "2026-08-12" } });
+  expect(screen.getByRole("button", { name: "应用使用方式" })).toBeDisabled();
+  fireEvent.click(screen.getByLabelText("也应用到所选历史日期起的记录"));
+  fireEvent.click(screen.getByRole("button", { name: "应用使用方式" }));
+  expect(screen.getByText("已保存 2 条体验，其中 1 条可用于曲线。")).toBeInTheDocument();
+  expect(container.querySelectorAll(".comfort-curve-observation")).toHaveLength(1);
+  expect(screen.getByText(/^1 条：缺少该日的历史额度参考/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("gridcell", { name: /8月12日.*18%/ }));
+  expect(screen.getByText(/仅本人使用 · 采用账号额度记录 · 部分采集/)).toBeInTheDocument();
+  expect(valid.quotaAllocation).toBeNull();
+});
 
 function data(): TokeiUsage {
   const day = (tokens: number, cost: number) => ({ inputTokens: tokens, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: tokens, estimatedCostUsd: cost, models: [] });

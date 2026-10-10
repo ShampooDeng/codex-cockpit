@@ -219,6 +219,25 @@ async function expandApp(): Promise<void> {
 }
 
 describe("App comfort persistence regressions", () => {
+  it("refreshes exclusive quota without a false cost warning or changing the sync allocation format", async () => {
+    const scope = "a".repeat(64);
+    const stored = { ...feedback(), observedUsedPercent: 18, usageObservedAt: "2026-09-09T00:00:00Z", usageCoverage: "partial" as const, usageSource: "official-snapshot" as const };
+    mocks.initialRuntime = { ...structuredClone(EMPTY_RUNTIME_STATE), comfortPersonId: "person-a", comfortFeedback: [stored] };
+    mocks.comfortUsage = { ...usage(), localOnly: true, localProfileScope: scope };
+    mocks.refreshComfortUsage.mockResolvedValue(mocks.comfortUsage);
+    mocks.getPreferences.mockResolvedValue({ ...DEFAULT_WIDGET_PREFERENCES, accountUsageDeclarations: [{ scope, mode: "exclusive", personId: "person-a", effectiveFrom: LOCAL_DATE, declaredAt: "2026-09-10T00:00:00Z" }] });
+    await expandApp();
+    fireEvent.click(screen.getByRole("button", { name: "refresh token snapshot" }));
+    await waitFor(() => {
+      const saved = (mocks.updateRuntimeState.mock.calls.at(-1)?.[0] as RuntimeState).comfortFeedback[0];
+      expect(saved.observedUsedPercent).toBe(18);
+      expect(saved.updatedAt).toBeDefined();
+      expect(saved.quotaAllocation).toBeNull();
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(JSON.stringify(mocks.updateRuntimeState.mock.calls.at(-1)?.[0])).not.toContain("exclusive-account");
+    expect(JSON.stringify(mocks.updateRuntimeState.mock.calls.at(-1)?.[0])).not.toContain("accountUsageDeclarations");
+  });
   it("collapses with an unanswered comfort check-in and shows it again on expand", async () => {
     mocks.initialRuntime = { ...structuredClone(EMPTY_RUNTIME_STATE), comfortPersonId: "person-a" };
     mocks.promptTarget = { localDate: LOCAL_DATE, isCatchUp: true };

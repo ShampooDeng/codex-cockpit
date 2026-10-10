@@ -763,6 +763,7 @@ mod tests {
         write_json(&dir.join("Spoof.json"), &payload("Mac", now + 1)).unwrap();
         write_json(&dir.join("Future.json"), &payload("Future", now + 3600)).unwrap();
         let mut usage = TokeiUsage {
+            local_profile_scope: None,
             local_device_id: None,
             local_usage_status: None,
             local_only: false,

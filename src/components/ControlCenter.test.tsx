@@ -10,6 +10,21 @@ import { buildMidnightQuotaPlan } from "../lib/midnightQuotaPlan";
 import { COMFORT_CURVE_VERSION } from "../lib/comfortFeedback";
 import type { ComfortFeedbackRecord } from "../types";
 
+it("uses the same exclusive-account interpretation for the parent curve and daily details", () => {
+  const date = "2026-09-09", scope = "a".repeat(64);
+  const stored: ComfortFeedbackRecord = { personId: "person-a", localDate: date, observedAt: "2026-09-09T12:00:00Z", comfort: "comfortable", observedUsedPercent: 18, usageObservedAt: "2026-09-09T12:00:00Z", usageCoverage: "partial", usageSource: "official-snapshot", curveVersion: COMFORT_CURVE_VERSION };
+  const props = { language: "zh-CN" as const, onClose: vi.fn(), onRefresh: vi.fn(), onPreferences: vi.fn(), autostartEnabled: false, onAutostart: vi.fn(), comfortPersonId: "person-a", comfortFeedback: [stored],
+    comfortUsage: { localOnly: true, localProfileScope: scope, fetchedAt: new Date().toISOString(), status: "ready" as const, warnings: [], projectBreakdownAvailable: false, defaultGroupId: "person-a", groups: [{ id: "person-a", name: "Member A", deviceIds: [] }], devices: [] } };
+  const preferences = { ...DEFAULT_WIDGET_PREFERENCES, accountUsageDeclarations: [{ scope, mode: "exclusive" as const, personId: "person-a", effectiveFrom: date, declaredAt: "2026-09-10T00:00:00Z" }] };
+  const view = render(<ControlCenter {...props} preferences={preferences} />);
+  fireEvent.click(screen.getByRole("button", { name: "额度" }));
+  expect(screen.getByText("已保存 1 条体验，其中 1 条可用于曲线。")).toBeInTheDocument();
+  expect(view.container.querySelector(".comfort-curve-observation title")).toHaveTextContent("18%");
+  view.rerender(<ControlCenter {...props} preferences={DEFAULT_WIDGET_PREFERENCES} />);
+  expect(screen.getByText("已保存 1 条体验，其中 0 条可用于曲线。")).toBeInTheDocument();
+  expect(screen.getByText(/1 条：请确认账号/)).toBeInTheDocument();
+});
+
 it("puts Usage first in the control center navigation", () => {
   render(<ControlCenter preferences={DEFAULT_WIDGET_PREFERENCES} language="zh-CN" onClose={() => {}} onRefresh={() => {}} onPreferences={() => {}} autostartEnabled={false} onAutostart={() => {}} />);
   const nav = screen.getByRole("navigation", { name: "控制中心页面" });

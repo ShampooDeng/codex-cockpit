@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_WIDGET_PREFERENCES, effectiveCompactLayout, effectiveStayExpanded, normalizeWidgetPreferences, syncDailyBudgetToSuggestion } from "./preferences";
 
 describe("widget preference migration", () => {
+  it("roundtrips profile-scoped usage declarations and resets a corrupt boundary set", () => {
+    const entry = { scope: "a".repeat(64), mode: "exclusive" as const, personId: "member-a", effectiveFrom: "2026-09-09", declaredAt: "2026-09-10T00:00:00Z" };
+    const saved = normalizeWidgetPreferences({ accountUsageDeclarations: [entry] });
+    expect(normalizeWidgetPreferences(JSON.parse(JSON.stringify(saved))).accountUsageDeclarations).toEqual([entry]);
+    expect(normalizeWidgetPreferences({ accountUsageDeclarations: [entry, { ...entry, effectiveFrom: "bad" }] }).accountUsageDeclarations).toEqual([]);
+  });
   it("preserves only valid personal ring colors", () => {
     expect(normalizeWidgetPreferences({ personRingColors: { alex: "#123456", bad: "red;url(x)" } }).personRingColors).toEqual({ alex: "#123456" });
     expect(normalizeWidgetPreferences({}).personRingColors).toEqual({});

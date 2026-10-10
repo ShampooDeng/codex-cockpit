@@ -118,6 +118,8 @@ export interface ComfortFeedbackRecord {
 }
 
 export interface ComfortPrompt {
+  /** Display-only interpretation; createComfortFeedbackRecord deliberately omits it. */
+  resolvedUsage?: import("./lib/personComfort").ResolvedComfortUsage;
   localDate: string;
   isCatchUp: boolean;
   personId?: string | null;
@@ -222,6 +224,8 @@ export interface ResetForecast {
 }
 
 export interface WidgetPreferences {
+  /** Local profile-scoped declarations; never part of shared settings or sync feedback. */
+  accountUsageDeclarations?: import("./lib/accountUsage").AccountUsageDeclaration[];
   codexFocusMode: boolean;
   dailyBudgetPercent: number;
   dailyBudgetLocalDate: string | null;

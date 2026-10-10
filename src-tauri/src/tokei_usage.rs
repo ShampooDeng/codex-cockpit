@@ -71,6 +71,7 @@ pub struct DeviceUsage {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokeiUsage {
+    pub local_profile_scope: Option<String>,
     pub local_device_id: Option<String>,
     pub local_usage_status: Option<String>,
     pub local_only: bool,
@@ -540,6 +541,7 @@ pub(crate) fn load_usage(home: &Path, settings: GroupSettings) -> TokeiUsage {
         "ready"
     };
     TokeiUsage {
+        local_profile_scope: None,
         local_device_id: None,
         local_usage_status: None,
         local_only: false,

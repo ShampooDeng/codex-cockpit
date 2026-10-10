@@ -1,12 +1,14 @@
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { localDateKey } from "../lib/comfortFeedback";
+import { comfortUsageReasonText, type ResolvedComfortUsage } from "../lib/personComfort";
 import { buildTokenComfortSnapshot } from "../lib/tokenComfort";
 import { formatTokens, type TokeiUsage } from "../lib/tokeiUsage";
 import type { CodexDailyUsage, ComfortCode, ComfortFeedbackRecord, ComfortQuotaAllocation, DailyUsageSummary, Language } from "../types";
 import "./ComfortHistoryCalendar.css";
 
 interface ComfortHistoryCalendarProps {
+  resolvedByDate?: Record<string, ResolvedComfortUsage>;
   records: readonly ComfortFeedbackRecord[];
   dailyUsage?: readonly DailyUsageSummary[];
   dailyUsageHistory?: readonly CodexDailyUsage[];
@@ -79,7 +81,7 @@ function formatUsagePercent(value: number, language: Language, coverage: CodexDa
   return `${coverage === "partial" ? "≥" : ""}${formatted}%`;
 }
 
-export function ComfortHistoryCalendar({ records, dailyUsage = [], dailyUsageHistory = [], language, onChange, tokenMode = false, personPercentMode = false, percentByDate = {}, personId = null, usageData = null, saving = false, onRefreshSnapshot }: ComfortHistoryCalendarProps) {
+export function ComfortHistoryCalendar({ records, dailyUsage = [], dailyUsageHistory = [], language, onChange, tokenMode = false, personPercentMode = false, percentByDate = {}, resolvedByDate = {}, personId = null, usageData = null, saving = false, onRefreshSnapshot }: ComfortHistoryCalendarProps) {
   const today = localDateKey(new Date());
   const [view, setView] = useState<CalendarView>("week");
   const [visibleWeekEnd, setVisibleWeekEnd] = useState(() => dateFromLocalDate(today));
@@ -150,6 +152,8 @@ export function ComfortHistoryCalendar({ records, dailyUsage = [], dailyUsageHis
   };
   const allocationFor = (date: string) => recordsByDate.get(date)?.quotaAllocation ?? percentByDate[date] ?? null;
   const percentText = (date: string) => {
+    const resolved = resolvedByDate[date];
+    if (resolved) return resolved.usedPercent != null && resolved.coverage !== "unavailable" ? `${resolved.basis === "cost-share" ? "≈" : ""}${formatUsagePercent(resolved.usedPercent, language)}${resolved.coverage === "partial" ? "*" : ""}` : null;
     const record = recordsByDate.get(date);
     if (!personId && !record?.personId) return record?.observedUsedPercent != null ? formatUsagePercent(record.observedUsedPercent, language) : null;
     const allocation = allocationFor(date);
@@ -244,6 +248,8 @@ export function ComfortHistoryCalendar({ records, dailyUsage = [], dailyUsageHis
             <small>{selectedRecord ? labels.recorded : labels.noRecord}</small>
           </div>}
           {personPercentMode && <div className="comfort-token-detail">
+            {resolvedByDate[selectedDate]?.reason && <p>{comfortUsageReasonText(resolvedByDate[selectedDate].reason!, language !== "en")}</p>}
+            {resolvedByDate[selectedDate]?.basis === "exclusive-account" && <p>{language === "en" ? "Personal account · recorded account quota" : "仅本人使用 · 采用账号额度记录"}{resolvedByDate[selectedDate].coverage === "partial" ? (language === "en" ? " · partial observation" : " · 部分采集") : ""}</p>}
             <p>{selectedRecord ? (language === "en" ? "Experience saved" : "已保存体验") : labels.noRecord} · {percentText(selectedDate) ?? (language === "en" ? "Quota percentage unavailable" : "额度百分比暂不可用")}</p>
             <p>{tokenText(selectedDate) ? `${tokenText(selectedDate)} Token` : (language === "en" ? "Token usage unavailable" : "Token 用量暂不可用")}</p>
             {personId && selectedRecord && onRefreshSnapshot && <button type="button" className="usage-text-button" disabled={saving} onClick={() => onRefreshSnapshot(selectedDate)}>{language === "en" ? "Update usage" : "更新用量"}</button>}

@@ -1,4 +1,5 @@
 import { Smiley, SmileySad, SmileyWink } from "@phosphor-icons/react";
+import { comfortUsageReasonText } from "../lib/personComfort";
 import type { ComfortCode, ComfortPrompt, Language } from "../types";
 
 interface ComfortFeedbackPanelProps {
@@ -49,7 +50,10 @@ export function ComfortFeedbackPanel({ prompt, language, onSelect, saving = fals
         ))}
       </div>
       <footer>
-        {prompt.personId ? <>
+        {prompt.resolvedUsage ? <>
+          <span>{prompt.resolvedUsage.usedPercent === null ? (language === "en" ? "Percentage unavailable" : "暂无百分比") : `${number.format(prompt.resolvedUsage.usedPercent)}%${prompt.resolvedUsage.coverage === "partial" ? "*" : ""}`}</span>
+          <span>{prompt.resolvedUsage.reason ? comfortUsageReasonText(prompt.resolvedUsage.reason, language !== "en") : prompt.resolvedUsage.basis === "exclusive-account" ? (language === "en" ? "Personal account quota" : "独享账号额度") : (language === "en" ? "By cost share" : "按金额分摊")}</span>
+        </> : prompt.personId ? <>
           <span>{prompt.quotaAllocation?.allocatedUsedPercent != null && prompt.quotaAllocation.coverage !== "unavailable" ? `≈${number.format(prompt.quotaAllocation.allocatedUsedPercent)}%` : (language === "en" ? "Percentage unavailable" : "暂无百分比")}</span>
           <span>{language === "en" ? "By cost share" : "按金额分摊"}</span>
         </> : <>

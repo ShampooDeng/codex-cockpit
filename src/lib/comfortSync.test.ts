@@ -41,9 +41,11 @@ describe("comfort sync merge", () => {
   });
   it("does not alter stored percentage allocation and strips unknown fields", () => {
     const r = record({ quotaAllocation: { metricVersion: "cost-share-v1", localDate: "2026-09-10", observedAt: "2026-09-10T08:00:00Z", totalUsedPercent: 42, personCostUsd: 30, totalCostUsd: 100, costShare: .3, allocatedUsedPercent: 12.6, coverage: "partial", deviceIds: ["mac"], missingDeviceIds: [] } });
-    const merged = mergeSyncedComfortFeedback([], [{ ...r, message: "private" }], now)!;
+    const merged = mergeSyncedComfortFeedback([], [{ ...r, message: "private", accountUsageDeclarations: [{ mode: "exclusive" }], resolvedUsage: { basis: "exclusive-account", usedPercent: 42 } }], now)!;
     expect(merged[0].observedUsedPercent).toBe(42);
     expect(merged[0].quotaAllocation?.allocatedUsedPercent).toBeCloseTo(12.6);
     expect(JSON.stringify(merged)).not.toContain("private");
+    expect(JSON.stringify(merged)).not.toContain("accountUsageDeclarations");
+    expect(JSON.stringify(merged)).not.toContain("exclusive-account");
   });
 });

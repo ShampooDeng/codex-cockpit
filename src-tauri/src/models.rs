@@ -69,7 +69,52 @@ impl ProviderSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AccountUsageDeclaration {
+    pub scope: String,
+    pub mode: String,
+    pub person_id: String,
+    pub effective_from: String,
+    pub declared_at: String,
+}
+
+impl AccountUsageDeclaration {
+    fn valid(&self) -> bool {
+        self.scope.len() == 64
+            && self
+                .scope
+                .bytes()
+                .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+            && matches!(self.mode.as_str(), "exclusive" | "shared" | "unconfirmed")
+            && !self.person_id.is_empty()
+            && self.person_id.len() <= 128
+            && !self.person_id.chars().any(char::is_control)
+            && self.effective_from.len() == 10
+            && chrono::NaiveDate::parse_from_str(&self.effective_from, "%Y-%m-%d")
+                .is_ok_and(|date| date.to_string() == self.effective_from)
+            && chrono::DateTime::parse_from_rfc3339(&self.declared_at).is_ok()
+    }
+}
+
+fn deserialize_account_usage<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<AccountUsageDeclaration>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let entries = serde_json::from_value::<Vec<AccountUsageDeclaration>>(value).unwrap_or_default();
+    // Fail closed as a whole, including malformed later boundaries.
+    Ok(
+        if entries.len() <= 128 && entries.iter().all(AccountUsageDeclaration::valid) {
+            entries
+        } else {
+            Vec::new()
+        },
+    )
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WidgetPreferences {
+    #[serde(default, deserialize_with = "deserialize_account_usage")]
+    pub account_usage_declarations: Vec<AccountUsageDeclaration>,
     #[serde(default = "default_true")]
     pub codex_focus_mode: bool,
     #[serde(default = "default_daily_budget_percent")]
@@ -204,6 +249,7 @@ fn default_update_channel() -> String {
 impl Default for WidgetPreferences {
     fn default() -> Self {
         Self {
+            account_usage_declarations: Vec::new(),
             codex_focus_mode: true,
             daily_budget_percent: default_daily_budget_percent(),
             daily_budget_local_date: None,
@@ -251,6 +297,14 @@ impl Default for WidgetPreferences {
 
 impl WidgetPreferences {
     pub fn normalized(mut self) -> Self {
+        if self.account_usage_declarations.len() > 128
+            || !self
+                .account_usage_declarations
+                .iter()
+                .all(AccountUsageDeclaration::valid)
+        {
+            self.account_usage_declarations.clear();
+        }
         self.auto_rotate_seconds = self.auto_rotate_seconds.clamp(5, 300);
         if !matches!(
             self.pinned_provider.as_deref(),
@@ -446,6 +500,28 @@ mod tests {
         let restored: WidgetPreferences = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.person_ring_colors.get("alex").unwrap(), "#123456");
         assert!(!restored.person_ring_colors.contains_key("bad"));
+    }
+
+    #[test]
+    fn account_usage_declarations_roundtrip_and_fail_closed() {
+        let mut value = serde_json::to_value(WidgetPreferences::default()).unwrap();
+        let declaration = serde_json::json!({
+            "scope": "a".repeat(64), "mode": "exclusive", "personId": "person-a",
+            "effectiveFrom": "2026-09-09", "declaredAt": "2026-09-10T04:00:00Z"
+        });
+        value["accountUsageDeclarations"] = serde_json::json!([declaration.clone()]);
+        let restored: WidgetPreferences = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(restored.account_usage_declarations.len(), 1);
+        let roundtrip = serde_json::to_value(restored.normalized()).unwrap();
+        assert_eq!(roundtrip["accountUsageDeclarations"][0], declaration);
+        let mut invalid = declaration.clone();
+        invalid["effectiveFrom"] = serde_json::json!("2026-02-30");
+        value["accountUsageDeclarations"] = serde_json::json!([declaration, invalid]);
+        let restored: WidgetPreferences = serde_json::from_value(value.clone()).unwrap();
+        assert!(restored.account_usage_declarations.is_empty());
+        value["accountUsageDeclarations"] = serde_json::json!({"invalid": true});
+        let restored: WidgetPreferences = serde_json::from_value(value).unwrap();
+        assert!(restored.account_usage_declarations.is_empty());
     }
 
     #[test]

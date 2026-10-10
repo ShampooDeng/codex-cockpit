@@ -492,7 +492,7 @@ impl Pricing {
             })
             .unwrap_or_else(|| (Pricing::default(), PricingOrigin::None));
         pricing.add_new_official_models();
-        if !app_catalog.is_some_and(|p| p.file_name().is_some_and(|n| n == "cloud-pricing.json")) {
+        if app_catalog.is_none_or(|p| p.file_name().is_none_or(|n| n != "cloud-pricing.json")) {
             if let Some(overrides) =
                 Self::read_overrides(&home.join(".tokei/pricing_overrides.json"))
             {
