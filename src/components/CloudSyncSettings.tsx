@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "../lib/bridge";
+import { getLocalDeviceId } from "../lib/tokeiBridge";
 import { getUsageSyncStatus, syncUsageNow, type UsageSyncStatus } from "../lib/usageSyncBridge";
 import type { TokeiUsage } from "../lib/tokeiUsage";
 
@@ -36,8 +37,8 @@ export function CloudSyncSettings({ usage, zh, onSynced }: { usage: TokeiUsage |
     let active = true;
     const refresh = async () => {
       try {
-        const [next, status] = await Promise.all([call<CloudStatus>("get_cloud_sync_status"), getUsageSyncStatus()]);
-        if (active) { setCloud(next); setRuntime(status); setDevice(current => current || status.settings?.deviceId || `device-${crypto.randomUUID().slice(0, 8)}`); }
+        const [next, status, localId] = await Promise.all([call<CloudStatus>("get_cloud_sync_status"), getUsageSyncStatus(), getLocalDeviceId()]);
+        if (active) { setCloud(next); setRuntime(status); setDevice(localId); }
       } catch { if (active) setError(zh ? "暂时无法读取云同步状态" : "Cloud status unavailable"); }
     };
     void refresh(); const timer = window.setInterval(() => void refresh(), 5000);
@@ -104,10 +105,10 @@ export function CloudSyncSettings({ usage, zh, onSynced }: { usage: TokeiUsage |
           <small>{zh ? "部署 Cloudflare 时设置的 BOOTSTRAP_SECRET，仅用于创建空间。" : "The BOOTSTRAP_SECRET set during deployment; used only to create a space."}</small>
         </>}
         <label>{zh ? "显示名称" : "Display name"}<input required maxLength={64} value={name} onChange={event => setName(event.target.value)} /></label>
-        <label>{zh ? "本机设备标识" : "Device ID"}<input required pattern="[A-Za-z0-9][A-Za-z0-9_.\-]*" maxLength={128} value={device} onChange={event => setDevice(event.target.value)} /></label>
+        <label>{zh ? "本机设备标识" : "Device ID"}<input required readOnly value={device} /></label>
         <small>{zh ? "每台设备使用不同标识；重新连接时沿用原标识。" : "Use a unique ID per device; keep it when reconnecting."}</small>
         <label className="cloud-share-option"><input type="checkbox" checked={shareTasks} onChange={event => setShareTasks(event.target.checked)} />{zh ? "共享任务名称和项目名称（可选）" : "Share task and project names (optional)"}</label>
-        <button disabled={busy}>{busy ? (zh ? "连接中…" : "Connecting…") : (zh ? "连接并同步" : "Connect and sync")}</button>
+        <button disabled={busy || !device}>{busy ? (zh ? "连接中…" : "Connecting…") : (zh ? "连接并同步" : "Connect and sync")}</button>
       </form>
     </>}
     {error && <p role="alert" className="usage-error">{error}</p>}

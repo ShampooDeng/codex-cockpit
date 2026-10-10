@@ -71,6 +71,9 @@ pub struct DeviceUsage {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokeiUsage {
+    pub local_device_id: Option<String>,
+    pub local_usage_status: Option<String>,
+    pub local_only: bool,
     pub local_group_id: Option<String>,
     pub fetched_at: String,
     pub status: String,
@@ -450,7 +453,7 @@ pub(crate) fn parse_device(
         ranges,
     })
 }
-fn load_usage(home: &Path, settings: GroupSettings) -> TokeiUsage {
+pub(crate) fn load_usage(home: &Path, settings: GroupSettings) -> TokeiUsage {
     let cfg = config(home);
     let mut warnings = Vec::new();
     if cfg.is_null() {
@@ -537,6 +540,9 @@ fn load_usage(home: &Path, settings: GroupSettings) -> TokeiUsage {
         "ready"
     };
     TokeiUsage {
+        local_device_id: None,
+        local_usage_status: None,
+        local_only: false,
         local_group_id: None,
         fetched_at: Utc::now().to_rfc3339(),
         status: status.into(),
@@ -550,27 +556,14 @@ fn load_usage(home: &Path, settings: GroupSettings) -> TokeiUsage {
 #[tauri::command]
 pub async fn get_tokei_usage(app: tauri::AppHandle) -> Result<TokeiUsage, String> {
     let home = home()?;
-    let settings = load_groups(&settings_path(&app)?, &config(&home))?;
     let data_dir = app
         .path()
         .app_config_dir()
         .map_err(|_| "settings_unavailable")?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut usage = load_usage(&home, settings);
-        crate::usage_sync::merge_managed_usage(&data_dir, &mut usage);
-        let device_id = crate::usage_sync::settings_at(&data_dir)
-            .ok()
-            .flatten()
-            .map(|settings| settings.device_id)
-            .or_else(|| config(&home)["device_id"].as_str().map(str::to_owned));
-        usage.local_group_id = local_group_id(&usage.groups, device_id.as_deref());
-        usage
-    })
-    .await
-    .map_err(|_| "source_unavailable".into())
+    crate::local_usage::read(data_dir, home).await
 }
 
-fn local_group_id(groups: &[UsageGroup], device_id: Option<&str>) -> Option<String> {
+pub(crate) fn local_group_id(groups: &[UsageGroup], device_id: Option<&str>) -> Option<String> {
     let device_id = device_id?;
     groups
         .iter()

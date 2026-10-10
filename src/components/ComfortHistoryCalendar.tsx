@@ -243,6 +243,11 @@ export function ComfortHistoryCalendar({ records, dailyUsage = [], dailyUsageHis
             <strong>{formatSelectedDate(selectedDate, language)}</strong>
             <small>{selectedRecord ? labels.recorded : labels.noRecord}</small>
           </div>}
+          {personPercentMode && <div className="comfort-token-detail">
+            <p>{selectedRecord ? (language === "en" ? "Experience saved" : "已保存体验") : labels.noRecord} · {percentText(selectedDate) ?? (language === "en" ? "Quota percentage unavailable" : "额度百分比暂不可用")}</p>
+            <p>{tokenText(selectedDate) ? `${tokenText(selectedDate)} Token` : (language === "en" ? "Token usage unavailable" : "Token 用量暂不可用")}</p>
+            {personId && selectedRecord && onRefreshSnapshot && <button type="button" className="usage-text-button" disabled={saving} onClick={() => onRefreshSnapshot(selectedDate)}>{language === "en" ? "Update usage" : "更新用量"}</button>}
+          </div>}
           {tokenMode && <div className="comfort-token-detail">
             <p>{selectedTokenText ? `${selectedRecord?.tokenSnapshot ? (language === "en" ? "Saved snapshot" : "已保存快照") : (language === "en" ? "Current daily ledger" : "当前日账")} · ${selectedTokenText} Token` : (language === "en" ? "No token snapshot for this day" : "这一天暂无 Token 快照")}</p>
             {selectedSnapshot && selectedSnapshot.coverage !== "unavailable" && <details>

@@ -318,4 +318,22 @@ describe("App comfort persistence regressions", () => {
     expect(screen.getByTestId("comfort-state")).toHaveTextContent('"totalTokens":6000000');
     expect(mocks.updateRuntimeState).not.toHaveBeenCalled();
   });
+  it("persists recovered tokens even when historical quota remains unavailable", async () => {
+    const stored = { ...feedback(), tokenSnapshot: { ...tokenSnapshot, coverage: "unavailable" as const, totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningTokens: 0 } };
+    mocks.initialRuntime = { ...structuredClone(EMPTY_RUNTIME_STATE), comfortPersonId: "person-a", comfortFeedback: [stored] };
+    const fresh = usage();
+    fresh.devices = [{ id: "device-local", updatedAt: fresh.fetchedAt, stale: false, ranges: {}, daily: { [LOCAL_DATE]: { inputTokens: 120, cachedInputTokens: 0, outputTokens: 30, reasoningTokens: 0, totalTokens: 150, estimatedCostUsd: null, models: [] } } }];
+    mocks.refreshComfortUsage.mockResolvedValue(fresh);
+    await expandApp();
+    fireEvent.click(screen.getByRole("button", { name: "refresh token snapshot" }));
+    await waitFor(() => {
+      const saved = (mocks.updateRuntimeState.mock.calls.at(-1)?.[0] as RuntimeState).comfortFeedback[0];
+      expect(saved.tokenSnapshot?.totalTokens).toBe(150);
+      expect(saved.observedUsedPercent).toBeNull();
+      expect(saved.personId).toBe(stored.personId);
+      expect(saved.observedAt).toBe(stored.observedAt);
+      expect(saved.comfort).toBe(stored.comfort);
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("缺少该日的历史额度参考");
+  });
 });

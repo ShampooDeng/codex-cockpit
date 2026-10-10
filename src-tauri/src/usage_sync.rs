@@ -269,13 +269,20 @@ pub async fn get_codex_project_usage(
         .path()
         .app_config_dir()
         .map_err(|_| "sync_storage_unavailable")?;
+    collect_local_usage(&data).await
+}
+
+pub(crate) async fn collect_local_usage(
+    data: &Path,
+) -> Result<codex_project_usage::ProjectUsageSnapshot, String> {
+    let id = crate::local_identity::resolve(data, &dirs::home_dir().ok_or("home_unavailable")?)?;
     let mut result = codex_project_usage::get_codex_project_usage_with_catalog(Some(
-        crate::cloud_sync::pricing_path(&data),
+        crate::cloud_sync::pricing_path(data),
     ))
     .await?;
-    if let Some(settings) = settings_at(&data)? {
-        identify(&mut result, &settings.device_id);
-        result.peer_tasks = crate::task_sync::read_peers(&data, &settings.device_id);
+    identify(&mut result, &id);
+    if settings_at(data)?.is_some() {
+        result.peer_tasks = crate::task_sync::read_peers(data, &id);
     }
     Ok(result)
 }
@@ -303,7 +310,12 @@ fn identify(result: &mut codex_project_usage::ProjectUsageSnapshot, id: &str) {
     result
         .warnings
         .retain(|w| w != "device_identity_unavailable");
-    if result.status == "partial" && result.warnings.is_empty() {
+    if result.status == "partial"
+        && result
+            .warnings
+            .iter()
+            .all(|w| w.starts_with("task_metadata_"))
+    {
         result.status = "ready".into();
     }
 }
@@ -325,6 +337,11 @@ pub fn save_usage_sync_settings(
         {
             return Err("sync_identity_locked".into());
         }
+    }
+    if crate::local_identity::resolve(&data, &dirs::home_dir().ok_or("home_unavailable")?)?
+        != settings.device_id
+    {
+        return Err("sync_identity_locked".into());
     }
     write_json(&data.join(SETTINGS), &settings)?;
     let catalog = data.join("usage-prices.json");
@@ -746,6 +763,9 @@ mod tests {
         write_json(&dir.join("Spoof.json"), &payload("Mac", now + 1)).unwrap();
         write_json(&dir.join("Future.json"), &payload("Future", now + 3600)).unwrap();
         let mut usage = TokeiUsage {
+            local_device_id: None,
+            local_usage_status: None,
+            local_only: false,
             local_group_id: None,
             fetched_at: Utc::now().to_rfc3339(),
             status: "unavailable".into(),

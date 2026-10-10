@@ -68,3 +68,16 @@ it("shows fixed-form efficiency with directly labeled percentage axes", () => {
   expect(container.querySelector(".comfort-curve-line--personalized")).not.toBeNull();
   expect(screen.queryByText("每日 Token（M）")).toBeNull();
 });
+
+it("keeps saved experiences visible when percentage data is unavailable and offers token refresh", () => {
+  const source = data(); source.localOnly = true;
+  const stored = { ...record("alex", "comfortable"), observedUsedPercent: null, usageCoverage: "unavailable" as const, quotaAllocation: null };
+  const refresh = vi.fn();
+  const { container } = render(<PersonComfortSection data={source} personId="alex" records={[stored]} language="zh-CN" onPersonChange={vi.fn()} onChange={vi.fn()} onRefreshSnapshot={refresh} />);
+  expect(screen.getByText("已保存 1 条体验，其中 0 条可用于曲线。")).toBeInTheDocument();
+  expect(container.querySelectorAll(".comfort-curve-observation")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("gridcell", { name: /8月12日.*刚刚好/ }));
+  expect(screen.getByText(/已保存体验.*额度百分比暂不可用/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "更新用量" }));
+  expect(refresh).toHaveBeenCalledWith("2026-08-12");
+});

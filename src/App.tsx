@@ -30,7 +30,7 @@ import { DEFAULT_WIDGET_PREFERENCES, effectiveCompactLayout, effectiveStayExpand
 import { resolveAppearanceMode, systemPrefersDark } from "./lib/appearance";
 import { appendComfortFeedback, appendComfortPromptedDate, buildComfortPrompt, createComfortFeedbackRecord, getPersonComfortPromptTarget, nextComfortReminderAt, personalizeComfortCurve } from "./lib/comfortFeedback";
 import { buildPersonQuotaAllocation } from "./lib/personQuotaAllocation";
-import { allocationForFeedback, backfillPersonAllocations } from "./lib/personComfort";
+import { allocationForFeedback, backfillPersonAllocations, refreshFeedbackUsage, missingComfortUsageReason } from "./lib/personComfort";
 import { buildTokenComfortSnapshot } from "./lib/tokenComfort";
 import { useComfortUsage } from "./lib/useComfortUsage";
 import { loadStartupState } from "./lib/startup";
@@ -266,16 +266,18 @@ export default function App() {
       } : existing;
       const capturedTotal = total.observedUsedPercent !== null ? total : savedTotal ?? total;
       const quotaAllocation = personId && data ? buildPersonQuotaAllocation(data, personId, localDate, capturedTotal, now) : null;
-      if (refreshSnapshot && (!quotaAllocation || quotaAllocation.coverage === "unavailable")) {
-        setComfortSaveError(language === "en" ? "Not enough cost data. The saved allocation is unchanged." : "金额数据不足，已保留原来的分摊记录。");
-        return;
-      }
       const prompt = { ...total, personId, personName: person?.name ?? existing?.personName ?? null, quotaAllocation, tokenSnapshot: personId && data ? buildTokenComfortSnapshot(data, personId, localDate, now) : null };
-      const feedback = existing ? { ...existing, comfort, observedAt: refreshSnapshot ? existing.observedAt : now.toISOString(), quotaAllocation: refreshSnapshot ? quotaAllocation : allocationForFeedback(existing, data, codexDailyUsageHistory, runtimeStateRef.current.dailyUsage, now), ...(refreshSnapshot ? { tokenSnapshot: prompt.tokenSnapshot, observedUsedPercent: capturedTotal.observedUsedPercent, usageObservedAt: capturedTotal.usageObservedAt, usageCoverage: capturedTotal.usageCoverage, usageSource: capturedTotal.usageSource } : {}) } : createComfortFeedbackRecord(prompt, comfort, now);
+      const feedback = existing ? refreshSnapshot
+        ? { ...refreshFeedbackUsage(existing, prompt.tokenSnapshot, quotaAllocation), ...(capturedTotal.observedUsedPercent !== null && capturedTotal.usageCoverage !== "unavailable" ? { observedUsedPercent: capturedTotal.observedUsedPercent, usageObservedAt: capturedTotal.usageObservedAt, usageCoverage: capturedTotal.usageCoverage, usageSource: capturedTotal.usageSource } : {}) }
+        : { ...existing, comfort, observedAt: now.toISOString(), quotaAllocation: allocationForFeedback(existing, data, codexDailyUsageHistory, runtimeStateRef.current.dailyUsage, now) }
+        : createComfortFeedbackRecord(prompt, comfort, now);
       const next = { ...runtimeStateRef.current, comfortFeedback: appendComfortFeedback(runtimeStateRef.current.comfortFeedback, { ...feedback, updatedAt: now.toISOString() }) };
       runtimeStateRef.current = next;
       setRuntimeState(next);
       await updateRuntimeState(next);
+      if (refreshSnapshot && (!quotaAllocation || quotaAllocation.coverage === "unavailable" || quotaAllocation.allocatedUsedPercent === null)) {
+        setComfortSaveError(missingComfortUsageReason(feedback, data, language !== "en"));
+      }
       if (comfortPromptRef.current?.localDate === localDate && (comfortPromptRef.current.personId ?? null) === personId) {
         comfortPromptRef.current = null;
         setComfortPrompt(null);

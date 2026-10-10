@@ -128,7 +128,7 @@ export function CodexUsagePanel({ zh, initialUsage = null, onOpenSettings = () =
   const knownTotal = rows.reduce((sum, row) => sum + (metricValue(row, metric) ?? 0), 0);
   const taskCostIncomplete = rows.some(row => row.estimatedCostUsd === null || row.costIncomplete);
   const taskTotal = !projects || metric === "cost" && taskCostIncomplete ? null : knownTotal;
-  const chartTotal = summary ? metricValue(summary, metric) : null;
+  const chartTotal = summary?.hasData ? metricValue(summary, metric) : null;
   const denominator = Math.max(chartTotal ?? 0, metric === "cost" ? summary?.knownCostUsd ?? 0 : 0, knownTotal);
   const unknownCost = metric === "cost" && (chartTotal === null || rows.some(row => row.estimatedCostUsd === null));
   const totalCostUnavailable = metric === "cost" && Boolean(summary?.hasData) && chartTotal === null;
@@ -147,6 +147,9 @@ export function CodexUsagePanel({ zh, initialUsage = null, onOpenSettings = () =
   if (!data) return <section className="codex-usage-panel"><p className={error ? "usage-error" : "usage-note"} role="status">{error ? (zh ? "暂时无法读取用量，请稍后重试。" : "Usage is unavailable. Try again shortly.") : (zh ? "正在读取用量…" : "Loading usage…")}</p></section>;
 
   return <section className="codex-usage-panel" aria-label={zh ? "Codex 用量" : "Codex usage"}>
+    {data.localUsageStatus === "empty" && <p className="usage-note" role="status">{zh ? "本机暂无可读取的用量记录。" : "No readable local usage records yet."}</p>}
+    {data.localUsageStatus === "unavailable" && <p className="usage-note" role="status">{zh ? "本机用量采集暂不可用，保留已有快照。" : "Local usage collection is unavailable; previous snapshots are retained."}</p>}
+    {data.warnings.includes("local_identity_conflict") && <p className="usage-note" role="status">{zh ? "本机旧身份与同步绑定不一致，已保留同步绑定并排除旧身份的重复用量。请检查组员设备归属。" : "The old local identity differs from the sync binding. The binding is retained and duplicate local usage is excluded; review member assignments."}</p>}
     <div className="usage-toolbar">
       <select aria-label={zh ? "用量分组" : "Usage group"} value={global ? "global" : groupId === null ? "" : `group:${groupId}`} onChange={(event) => { const isGlobal = event.target.value === "global"; setGlobal(isGlobal); if (isGlobal) { setView("users"); setMetric("cost"); } else { setGroupId(event.target.value.slice(6) || null); if (view === "users") setView("models"); } setShowAll(false); }}>
         <option value="" disabled>{zh ? "选择分组" : "Choose group"}</option>

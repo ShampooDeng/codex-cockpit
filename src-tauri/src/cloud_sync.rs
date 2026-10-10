@@ -303,6 +303,10 @@ fn verify_device(data: &Path, device: &str) -> Result<(), String> {
     if !usage_sync::safe_id(device) {
         return Err("cloud_device_required".into());
     }
+    if crate::local_identity::resolve(data, &dirs::home_dir().ok_or("home_unavailable")?)? != device
+    {
+        return Err("cloud_identity_mismatch".into());
+    }
     let legacy = data.join("usage-sync.json");
     if legacy.exists() {
         let saved = tokei_usage::read_json(&legacy, 32768)?;
@@ -701,7 +705,7 @@ mod tests {
         let f = Fixture::new();
         usage_sync::write_json(
             &f.0.join("usage-sync.json"),
-            &json!({"deviceId":"Windows-Test"}),
+            &json!({"enabled":false,"intervalSeconds":300,"deviceId":"Windows-Test","remote":"git@github.com:example/usage.git","branch":"main"}),
         )
         .unwrap();
         assert!(verify_device(&f.0, "Windows-Test").is_ok());

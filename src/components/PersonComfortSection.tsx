@@ -1,7 +1,7 @@
 import type { TokeiUsage } from "../lib/tokeiUsage";
 import { useMemo } from "react";
 import { buildComfortPrompt, personalizeComfortCurve } from "../lib/comfortFeedback";
-import { personalFeedbackView } from "../lib/personComfort";
+import { personalFeedbackView, missingComfortUsageReason } from "../lib/personComfort";
 import { buildPersonQuotaAllocation } from "../lib/personQuotaAllocation";
 import type { CodexDailyUsage, ComfortCode, ComfortFeedbackRecord, ComfortQuotaAllocation, DailyUsageSummary, Language } from "../types";
 import { ComfortHistoryCalendar } from "./ComfortHistoryCalendar";
@@ -47,6 +47,8 @@ export function PersonComfortSection({ data, personId, records, language, dailyU
     {!data && !loadingError && <p className="comfort-person-note" role="status">{zh ? "正在读取用户分组与日账…" : "Loading people and daily usage…"}</p>}
     {error && <p className="comfort-person-error" role="alert">{error}</p>}
     <ComfortCurvePanel curve={curve} language={language} estimated={Boolean(personId)} personSelector={personSelector} />
+    <p className="comfort-person-note" role="status">{zh ? `已保存 ${ownRecords.length} 条体验，其中 ${curve.sampleCount} 条可用于曲线。` : `${ownRecords.length} saved experiences; ${curve.sampleCount} usable for the curve.`}</p>
+    {ownRecords.length > 0 && curve.sampleCount === 0 && <p className="comfort-person-note">{missingComfortUsageReason(records.find(record => (record.personId ?? null) === personId)!, data, zh)}</p>}
     <ComfortHistoryCalendar key={personId ?? "legacy"} personPercentMode percentByDate={percentByDate} personId={selected ? personId : null} usageData={data} records={ownRecords} language={language} onChange={onChange} saving={saving} onRefreshSnapshot={selected ? onRefreshSnapshot : undefined} />
   </div>;
 }

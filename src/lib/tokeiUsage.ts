@@ -35,6 +35,9 @@ export interface TokeiDevice {
   ranges: Record<string, DailyModelUsage & { start: string | null; end: string | null }>;
 }
 export interface TokeiUsage extends TokeiGroupSettings {
+  localDeviceId?: string | null;
+  localOnly?: boolean;
+  localUsageStatus?: "ready" | "partial" | "empty" | "unavailable" | null;
   /** Derived on this device; never part of shared member settings. */
   localGroupId?: string | null;
   fetchedAt: string;
@@ -91,6 +94,8 @@ export interface ProjectUsageSnapshot {
 
 /** Keep the local model ledger on the same scan as task details; peer snapshots stay untouched. */
 export function withLiveLocalUsage(data: TokeiUsage, projects: ProjectUsageSnapshot | null): TokeiUsage {
+  // Native responses already contain the unified local ledger.
+  if (data.localDeviceId) return data;
   // The incremental collector returns a newer timestamp even while it is still
   // scanning history. Never replace a complete device ledger with that prefix.
   if (!projects?.deviceId || projects.status === "unavailable" || projects.warnings.includes("scan_limit") || !projects.projects.length) return data;

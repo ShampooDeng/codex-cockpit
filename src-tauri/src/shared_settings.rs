@@ -284,6 +284,79 @@ pub fn edit_groups(
     expected: &GroupSettings,
 ) -> Result<GroupSettings, String> {
     let _guard = LOCK.lock().map_err(|_| "shared_settings_busy")?;
+    edit_groups_locked(data, settings, expected)
+}
+
+/// Only a fresh local profile gets a default person. Existing people and history
+/// require explicit device assignment through the normal revision-aware editor.
+pub(crate) fn ensure_local_person(data: &Path, device: &str) -> Result<GroupSettings, String> {
+    let _guard = LOCK.lock().map_err(|_| "shared_settings_busy")?;
+    let old = tokei_usage::local_groups(data)?;
+    if usage_sync::settings_at(data)?.is_none()
+        && data
+            .join(FILE)
+            .try_exists()
+            .map_err(|_| "shared_settings_unavailable")?
+        && !data
+            .join("usage-groups.json")
+            .try_exists()
+            .map_err(|_| "shared_settings_unavailable")?
+    {
+        // Recover a first-run write interrupted between the authoritative ledger
+        // and its group projection, without inventing another person or revision.
+        let recovered = project(&load(data)?, &old)?;
+        tokei_usage::save_groups(&data.join("usage-groups.json"), &recovered)?;
+        return Ok(recovered);
+    }
+    if !old.groups.is_empty()
+        || usage_sync::settings_at(data)?.is_some()
+        || data
+            .join("usage-groups.json")
+            .try_exists()
+            .map_err(|_| "shared_settings_unavailable")?
+        || data
+            .join(FILE)
+            .try_exists()
+            .map_err(|_| "shared_settings_unavailable")?
+    {
+        return Ok(old);
+    }
+    for name in ["runtime-state.json", "runtime-state.json.bak"] {
+        let path = data.join(name);
+        if path
+            .try_exists()
+            .map_err(|_| "shared_settings_unavailable")?
+        {
+            let runtime = tokei_usage::read_json(&path, 8 * 1024 * 1024)?;
+            if runtime
+                .get("comfortFeedback")
+                .is_some_and(|value| value.as_array().is_none_or(|records| !records.is_empty()))
+            {
+                return Ok(old);
+            }
+        }
+    }
+    let person = format!("person-{device}");
+    // A generated device ID fits this bound; legacy IDs may already use all 128.
+    if person.len() > 128 {
+        return Ok(old);
+    }
+    let next = GroupSettings {
+        groups: vec![UsageGroup {
+            id: person.clone(),
+            name: "我".into(),
+            device_ids: vec![device.into()],
+        }],
+        default_group_id: Some(person),
+    };
+    edit_groups_locked(data, &next, &old)
+}
+
+fn edit_groups_locked(
+    data: &Path,
+    settings: &GroupSettings,
+    expected: &GroupSettings,
+) -> Result<GroupSettings, String> {
     tokei_usage::validate_groups(settings)?;
     let old = tokei_usage::local_groups(data)?;
     if serde_json::to_value(&old).ok() != serde_json::to_value(expected).ok() {
@@ -405,6 +478,42 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+    #[test]
+    fn fresh_local_person_is_stable_and_does_not_enable_sync() {
+        let f = Fixture::new();
+        let first = ensure_local_person(&f.0, "local-test-device").unwrap();
+        assert_eq!(first.groups.len(), 1);
+        assert_eq!(first.groups[0].name, "我");
+        assert_eq!(first.groups[0].device_ids, vec!["local-test-device"]);
+        assert_eq!(
+            ensure_local_person(&f.0, "local-test-device").unwrap(),
+            first
+        );
+        assert!(usage_sync::settings_at(&f.0).unwrap().is_none());
+    }
+    #[test]
+    fn historical_feedback_or_explicit_empty_settings_prevent_auto_assignment() {
+        let f = Fixture::new();
+        usage_sync::write_json(
+            &f.0.join("runtime-state.json"),
+            &json!({"comfortFeedback":[{"personId":"person-a"}]}),
+        )
+        .unwrap();
+        assert!(ensure_local_person(&f.0, "local-test-device")
+            .unwrap()
+            .groups
+            .is_empty());
+        let g = Fixture::new();
+        let empty = GroupSettings {
+            groups: vec![],
+            default_group_id: None,
+        };
+        tokei_usage::save_groups(&g.0.join("usage-groups.json"), &empty).unwrap();
+        assert_eq!(
+            ensure_local_person(&g.0, "local-test-device").unwrap(),
+            empty
+        );
     }
     #[test]
     fn bootstrap_never_exports_defaults_and_editor_detects_stale_base() {

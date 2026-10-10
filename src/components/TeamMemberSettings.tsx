@@ -55,7 +55,8 @@ export function TeamMemberSettings({ usage, loadingError, preferences, zh, onPre
   const updatePreferences = (patch: Partial<WidgetPreferences>) => onPreferences({ ...preferences, ...patch });
 
   return <>
-    {settings && usage ? <UsageGroupEditor key={editorVersion} settings={settings} deviceIds={[...usage.devices.map(device => device.id), ...cloudDevices]} zh={zh} onSave={save} onReload={reload} synced={cloudConnected} /> : <section className="minimal-section team-member-placeholder" aria-label={zh ? "组员与设备" : "Members & devices"}>
+    {usage?.localDeviceId && !settings?.groups.some(group => group.deviceIds.includes(usage.localDeviceId!)) && <p className="usage-note" role="status">{zh ? "本机尚未归属。请在下方将本机分配给你原有的成员并保存，已有体验记录会保留原归属。" : "This device is unassigned. Assign it to your existing member below and save; saved feedback keeps its owner."}</p>}
+    {settings && usage ? <UsageGroupEditor key={editorVersion} settings={settings} localDeviceId={usage.localDeviceId} deviceIds={[...usage.devices.map(device => device.id), ...(usage.localDeviceId ? [usage.localDeviceId] : []), ...cloudDevices]} zh={zh} onSave={save} onReload={reload} synced={cloudConnected} /> : <section className="minimal-section team-member-placeholder" aria-label={zh ? "组员与设备" : "Members & devices"}>
       <header className="minimal-section-header"><strong>{zh ? "组员与设备" : "Members & devices"}</strong></header>
       <p className={loadingError ? "usage-error" : "usage-note"} role="status">{loadingError ? (zh ? "暂时无法读取组员，请稍后重试。" : "Members are unavailable. Try again shortly.") : (zh ? "正在读取组员…" : "Loading members…")}</p>
     </section>}

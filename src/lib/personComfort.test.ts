@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COMFORT_CURVE_VERSION, personalizeComfortCurve } from "./comfortFeedback";
-import { allocationForFeedback, backfillPersonAllocations, personalFeedbackView } from "./personComfort";
+import { allocationForFeedback, backfillPersonAllocations, personalFeedbackView, refreshFeedbackUsage } from "./personComfort";
+import { buildTokenComfortSnapshot } from "./tokenComfort";
 import type { TokeiUsage } from "./tokeiUsage";
 import type { ComfortFeedbackRecord } from "../types";
 
@@ -45,12 +46,42 @@ describe("percentage comfort presentation", () => {
   it("shows partial estimates without permanently migrating them", () => {
     const partial = usage(); partial.devices = partial.devices.slice(0, 1);
     expect(personalFeedbackView(record(), partial, [], [], now).quotaAllocation?.coverage).toBe("partial");
-    expect(backfillPersonAllocations([record()], partial, [], [], now)).toBeNull();
+    const migrated = backfillPersonAllocations([record()], partial, [], [], now);
+    expect(migrated?.[0].quotaAllocation).toBeUndefined();
+    expect(migrated?.[0].tokenSnapshot?.coverage).toBe("complete");
   });
   it("does not turn unavailable personal cost into zero or shared-account usage", () => {
     const missing = usage(); missing.devices[0].daily = {};
     expect(personalFeedbackView(record(), missing, [], [], now).observedUsedPercent).toBeNull();
     expect(backfillPersonAllocations([record()], missing, [], [], now)).toBeNull();
     expect(personalFeedbackView(record(null), missing, [], [], now).observedUsedPercent).toBe(60);
+  });
+  it("recovers tokens without historical quota and preserves the experience and owner", () => {
+    const stored = { ...record(), observedUsedPercent: null, usageCoverage: "unavailable" as const };
+    const token = buildTokenComfortSnapshot(usage(), "alex", date, now);
+    const unavailable = allocationForFeedback(stored, usage(), [], [], now);
+    const result = refreshFeedbackUsage(stored, token, unavailable);
+    expect(result.tokenSnapshot?.totalTokens).toBe(100);
+    expect(result.observedUsedPercent).toBeNull();
+    expect(result.personId).toBe(stored.personId);
+    expect(result.observedAt).toBe(stored.observedAt);
+    expect(result.comfort).toBe(stored.comfort);
+    expect(personalFeedbackView(result, usage(), [], [], now).observedUsedPercent).toBeNull();
+  });
+  it("replaces unavailable allocations once, without overwriting complete snapshots", () => {
+    const missing = usage(); missing.devices = [];
+    const stored = { ...record(), quotaAllocation: allocationForFeedback(record(), missing, [], [], now) };
+    const migrated = backfillPersonAllocations([stored], usage(), [], [], now)!;
+    expect(migrated[0].quotaAllocation?.allocatedUsedPercent).toBe(18);
+    expect(migrated[0].updatedAt).toBe(now.toISOString());
+    expect(backfillPersonAllocations(migrated, usage(), [], [], now)).toBeNull();
+    const worse = refreshFeedbackUsage(migrated[0], buildTokenComfortSnapshot(missing, "alex", date, now), stored.quotaAllocation);
+    expect(worse.tokenSnapshot).toBe(migrated[0].tokenSnapshot);
+    expect(worse.quotaAllocation).toBe(migrated[0].quotaAllocation);
+  });
+  it("does not infer the whole shared-account allocation from local costs", () => {
+    const local = { ...usage(), localOnly: true };
+    expect(allocationForFeedback(record(), local, [], [], now)?.coverage).toBe("unavailable");
+    expect(buildTokenComfortSnapshot(local, "alex", date, now)?.totalTokens).toBe(100);
   });
 });

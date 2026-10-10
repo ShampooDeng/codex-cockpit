@@ -27,6 +27,7 @@
 | 原生调用/浏览器演示区别 | `src/lib/bridge.ts`、`src/lib/tokeiBridge.ts`、`src-tauri/src/lib.rs` | `src/lib/bridge.test.ts`；浏览器使用虚构数据，不能证明原生凭据读取有效 |
 | 官方额度/登录读取 | `src-tauri/src/codex.rs`、`src/lib/officialUsage.ts` | Rust 模块内测试、`src/lib/officialUsage.test.ts` |
 | Token、模型识别、定价与任务去重 | `src-tauri/src/codex_project_usage.rs`、`src-tauri/src/tokei_usage.rs`、`src/lib/tokeiUsage.ts` | Rust 模块内测试、`src/lib/taskUsage.test.ts`、`src/lib/tokeiUsage.test.ts` |
+| 独立本机身份与统一日账 | `src-tauri/src/local_identity.rs`、`src-tauri/src/local_usage.rs`、`src-tauri/src/shared_settings.rs` | 模块内测试；`src/lib/useComfortUsage.test.ts`；无同步配置也可采集，旧成员需明确绑定本机 |
 | 采集、上传、接收与旧 Git 兼容 | `src-tauri/src/usage_sync.rs`、`src-tauri/src/usage_sync_snapshot.rs`、`src-tauri/src/cloud_sync.rs`、`src-tauri/src/usage_sync_git.rs` | Rust 模块内测试、`docs/SYNC-CONTRACT-V2.md`；新用户默认用 Cloudflare，不配置旧 Git 同步 |
 | 云同步界面、邀请、服务地址 | `src/components/CloudSyncSettings.tsx`、`src/components/UsageSyncPanel.tsx` | 各自 `.test.tsx`、`skills/cloudflare-sync/references/self-hosting.md` |
 | 成员、设备归属、共享冲突 | `src/components/TeamMemberSettings.tsx`、`src-tauri/src/shared_settings.rs`、`src-tauri/src/cloud_sync.rs` | `src/components/TeamMemberSettings.test.tsx`、`cloud/usage-sync-worker/test/transport.test.mjs` |
@@ -50,6 +51,7 @@
 | `usage-groups.json` | 成员与设备归属；修改应走 App/同步协议，避免绕过 revision |
 | `cloud-sync.json`、`cloud-members.json`、`cloud-pull-status.json` | 服务/空间/设备配置与拉取状态；包含私有标识，不整份输出 |
 | `usage-sync-state.json`、`usage-sync-local.json`、`cloud-snapshots/` | 采集/同步状态与本地、远端快照；只检查所需状态/覆盖率，不作为支持附件 |
+| `local-identity.json`、`local-usage-cache.json` | 独立于同步的稳定本机标识与聚合日账缓存；不是同步配置，不触发上传，不含原始会话；身份冲突须保留已有绑定并显式处理归属 |
 | `usage-prices.json`、`cloud-pricing.json`、`cloud-shared-settings.json` | 本地/空间价格与共享设置；查实际价格来源，不用本地覆盖破坏全组口径 |
 | 系统 Keychain / Credential Manager | 服务与设备绑定的同步凭据，不能导出、日志打印或拷贝到其他设备 |
 

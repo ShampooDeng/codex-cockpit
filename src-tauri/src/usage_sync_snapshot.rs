@@ -139,6 +139,28 @@ fn wire_period(day: &UsagePeriod, ledger: bool) -> Value {
     result
 }
 
+/// Aggregate-only baseline for the local reader; contains no task metadata.
+pub(crate) fn device_baseline(device: &tokei_usage::DeviceUsage) -> Value {
+    let ledger: Map<_, _> = device
+        .daily
+        .iter()
+        .map(|(date, day)| (date.clone(), wire_period(day, true)))
+        .collect();
+    let ranges: Map<_, _> = device
+        .ranges
+        .iter()
+        .map(|(key, range)| (key.clone(), wire_period(range, false)))
+        .collect();
+    let bounds: Map<_, _> = device
+        .ranges
+        .iter()
+        .map(|(key, range)| (key.clone(), json!({"start":range.start,"end":range.end})))
+        .collect();
+    json!({"_device":device.id,"_ts":device.updated_at.as_deref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|t| t.timestamp()),
+        "_ledger":{"tools":{"codex":ledger}},"codex":{"ranges":ranges},"_range_bounds":bounds,
+        "_cockpit":{"status":if device.collection_partial {"partial"} else {"ready"}}})
+}
+
 /// Preserve whole historical days, never add old and rescanned copies of the same day.
 /// A partial/lower rescan cannot shrink a previous day's observed total.
 pub fn build(
@@ -153,6 +175,25 @@ pub(crate) fn build_at(
     collected: &ProjectUsageSnapshot,
     baselines: &[Value],
     today: NaiveDate,
+) -> Result<Value, String> {
+    build_with_policy(device_id, collected, baselines, today, false)
+}
+
+pub(crate) fn build_local_at(
+    device_id: &str,
+    collected: &ProjectUsageSnapshot,
+    baselines: &[Value],
+    today: NaiveDate,
+) -> Result<Value, String> {
+    build_with_policy(device_id, collected, baselines, today, true)
+}
+
+fn build_with_policy(
+    device_id: &str,
+    collected: &ProjectUsageSnapshot,
+    baselines: &[Value],
+    today: NaiveDate,
+    local: bool,
 ) -> Result<Value, String> {
     let mut days: BTreeMap<String, UsagePeriod> = BTreeMap::new();
     let mut native_days: BTreeSet<String> = BTreeSet::new();
@@ -244,10 +285,18 @@ pub(crate) fn build_at(
             }
         }
         if days.get(&date).is_none_or(|old| {
-            (native_days.contains(&date)
-                || (collected.status == "ready" && collected.warnings.is_empty()))
-                && !(old.metrics.estimated_cost_usd.is_some()
-                    && day.metrics.estimated_cost_usd.is_none())
+            (if local {
+                collected.status != "unavailable"
+                    && collected
+                        .warnings
+                        .iter()
+                        .all(|w| w == "unknown_model" || w.starts_with("task_metadata_"))
+            } else {
+                native_days.contains(&date)
+                    || (collected.status == "ready" && collected.warnings.is_empty())
+            }) && (local
+                || !(old.metrics.estimated_cost_usd.is_some()
+                    && day.metrics.estimated_cost_usd.is_none()))
                 && (day.metrics.total_tokens > old.metrics.total_tokens
                     || (day.metrics.total_tokens == old.metrics.total_tokens
                         && old.metrics.estimated_cost_usd.is_none()
@@ -303,8 +352,10 @@ pub(crate) fn build_at(
             continue;
         }
         let mut range = combine(matching.into_iter())?;
-        if let Some(old) = old.filter(|old| old.metrics.total_tokens >= range.metrics.total_tokens)
-        {
+        if let Some(old) = old.filter(|old| {
+            old.metrics.total_tokens > range.metrics.total_tokens
+                || (!local && old.metrics.total_tokens == range.metrics.total_tokens)
+        }) {
             range = old.clone();
         }
         bounds.insert(key.into(), json!({"start":start,"end":end}));

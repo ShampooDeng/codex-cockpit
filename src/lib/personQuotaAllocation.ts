@@ -116,7 +116,8 @@ export function buildPersonQuotaAllocation(
   const totalObservedAt = total.usageObservedAt === null ? null : Date.parse(total.usageObservedAt);
   const invalidQuotaReference = totalUsedPercent === null || !validCoverage(total.usageCoverage) || total.usageCoverage === "unavailable"
     || (totalObservedAt !== null && (!Number.isFinite(totalObservedAt) || totalObservedAt > now.getTime() + FUTURE_TOLERANCE_MS));
-  if (localDate > localDateKey(now) || invalidQuotaReference) return unavailableAllocation(localDate, observedAt, totalUsedPercent);
+  // Local collection alone cannot establish the whole shared account's costs.
+  if (data.localOnly || localDate > localDateKey(now) || invalidQuotaReference) return unavailableAllocation(localDate, observedAt, totalUsedPercent);
 
   // All configured ids plus readable unassigned devices form the shared-cost denominator.
   const configuredIds = data.groups.flatMap(group => group.deviceIds).filter(safeDeviceId);

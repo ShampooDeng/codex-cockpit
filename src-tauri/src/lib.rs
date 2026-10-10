@@ -4,6 +4,8 @@ mod cloud_sync;
 mod codex;
 mod codex_project_usage;
 mod comfort_sync;
+mod local_identity;
+mod local_usage;
 mod models;
 mod qoder;
 mod reset_forecast;
@@ -3077,6 +3079,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            local_identity::get_local_device_id,
             app_updater::check_cockpit_update,
             tokei_usage::get_tokei_usage,
             usage_sync::get_usage_sync_status,

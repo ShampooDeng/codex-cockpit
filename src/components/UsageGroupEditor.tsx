@@ -4,6 +4,7 @@ import { validateGroupSettings, type TokeiGroupSettings } from "../lib/tokeiUsag
 interface Props {
   settings: TokeiGroupSettings;
   deviceIds: string[];
+  localDeviceId?: string | null;
   zh: boolean;
   onSave: (settings: TokeiGroupSettings, expected: TokeiGroupSettings) => Promise<void>;
   onCancel?: () => void;
@@ -14,7 +15,7 @@ interface Props {
   onReload?: () => Promise<void>;
 }
 
-export function UsageGroupEditor({ settings, deviceIds, zh, onSave, onCancel, title, hint, readOnly = false, synced = false, onReload }: Props) {
+export function UsageGroupEditor({ settings, deviceIds, localDeviceId, zh, onSave, onCancel, title, hint, readOnly = false, synced = false, onReload }: Props) {
   const [draft, setDraft] = useState<TokeiGroupSettings>(() => ({ groups: structuredClone(settings.groups), defaultGroupId: settings.defaultGroupId }));
   const [expected] = useState<TokeiGroupSettings>(() => ({ groups: structuredClone(settings.groups), defaultGroupId: settings.defaultGroupId }));
   const [busy, setBusy] = useState(false);
@@ -54,7 +55,7 @@ export function UsageGroupEditor({ settings, deviceIds, zh, onSave, onCancel, ti
       }}>{zh ? "+ 新增组员" : "+ Add member"}</button>
       <div className="usage-device-settings">
         <div className="usage-editor-subheading">{zh ? "设备用量算给谁" : "Whose usage each device counts toward"}</div>
-        {devices.map((id) => <label key={id} className="usage-setting-row"><span title={id}>{id}</span>
+        {devices.map((id) => <label key={id} className="usage-setting-row"><span title={id}>{id === localDeviceId ? `${zh ? "本机" : "This device"} · ${id}` : id}</span>
           <select aria-label={`${zh ? "设备归属" : "Device group"}: ${id}`} value={draft.groups.find((group) => group.deviceIds.includes(id))?.id ?? ""} onChange={(event) => assign(id, event.target.value)}>
             <option value="">{zh ? "未分组" : "Unassigned"}</option>
             {draft.groups.map((group, index) => <option key={group.id} value={group.id}>{group.name || `${zh ? "新组员" : "New member"} ${index + 1}`}</option>)}

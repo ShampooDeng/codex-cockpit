@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CloudSyncSettings } from './CloudSyncSettings';
 const api=vi.hoisted(()=>({invoke:vi.fn(),status:vi.fn(),sync:vi.fn()}));
 vi.mock('../lib/bridge',()=>({isTauri:()=>true}));
+vi.mock('../lib/tokeiBridge',()=>({getLocalDeviceId:async()=> 'Windows-Test'}));
 vi.mock('@tauri-apps/api/core',()=>({invoke:api.invoke}));
 vi.mock('../lib/usageSyncBridge',()=>({getUsageSyncStatus:api.status,syncUsageNow:api.sync}));
 beforeEach(()=>{api.invoke.mockReset().mockResolvedValue({config:null,members:[]});api.status.mockReset().mockResolvedValue({settings:{deviceId:'Windows-Test'},phase:'idle'});api.sync.mockReset().mockResolvedValue({phase:'idle',lastError:null});});

@@ -2,6 +2,13 @@ import { isTauri } from "./bridge";
 import { createUsagePreview, validateGroupSettings, type DailyModelUsage, type ProjectUsageSnapshot, type TokeiGroupSettings, type TokeiUsage, type UsageMetrics } from "./tokeiUsage";
 
 let previewSettings: TokeiGroupSettings | null = null;
+let pendingUsage: Promise<TokeiUsage> | null = null;
+
+export async function getLocalDeviceId(): Promise<string> {
+  if (!isTauri()) return "Demo Mac";
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("get_local_device_id");
+}
 
 export async function getProjectUsage(): Promise<ProjectUsageSnapshot> {
   if (!isTauri()) {
@@ -16,13 +23,22 @@ export async function getProjectUsage(): Promise<ProjectUsageSnapshot> {
     ] };
   }
   const { invoke } = await import("@tauri-apps/api/core");
+  if (pendingUsage) await pendingUsage.catch(() => undefined);
   return invoke<ProjectUsageSnapshot>("get_codex_project_usage");
 }
 
-export async function getTokeiUsage(): Promise<TokeiUsage> {
+export function getTokeiUsage(): Promise<TokeiUsage> {
+  if (pendingUsage) return pendingUsage;
+  const request = readTokeiUsage().finally(() => { if (pendingUsage === request) pendingUsage = null; });
+  pendingUsage = request;
+  return request;
+}
+
+async function readTokeiUsage(): Promise<TokeiUsage> {
   if (!isTauri()) {
     const usage = { ...createUsagePreview(), ...(previewSettings ?? {}) };
     usage.localGroupId = usage.groups.find(group => group.deviceIds.includes("Demo Mac"))?.id ?? null;
+    usage.localDeviceId = "Demo Mac";
     return usage;
   }
   const { invoke } = await import("@tauri-apps/api/core");
